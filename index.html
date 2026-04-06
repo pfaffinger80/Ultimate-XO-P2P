@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Ultimate XO Online - P2P</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #f8f9fa; 
+            --line-color: #1a1a1a;
+            --online-green: #4caf50;
+        }
+
+        * { box-sizing: border-box; }
+        
+        html, body { 
+            margin: 0; padding: 0;
+            width: 100vw; height: 100dvh; 
+            overflow: hidden; 
+            background-color: var(--bg-color); 
+            font-family: 'Segoe UI', sans-serif; 
+            display: flex; flex-direction: column; align-items: center; 
+        }
+
+        /* Netzwerk-Leiste */
+        .net-bar {
+            width: 100%; background: #fff; padding: 10px;
+            display: flex; flex-wrap: wrap; justify-content: center;
+            gap: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); z-index: 20;
+        }
+
+        .header { 
+            height: 80px; width: 100%;
+            display: flex; flex-direction: column;
+            justify-content: center; align-items: center;
+            flex-shrink: 0; position: relative;
+            z-index: 10;
+        }
+
+        h1 { margin: 0; font-size: 24px; color: #333; }
+        #status { margin: 4px 0 0 0; font-size: 16px; color: #555; }
+        
+        .net-btn {
+            padding: 6px 14px;
+            background: #333; color: white;
+            border: none; border-radius: 20px;
+            cursor: pointer; font-weight: bold;
+        }
+
+        .board-container {
+            flex-grow: 1; width: 100%;
+            display: flex; align-items: center; justify-content: center;
+            padding: 10px;
+        }
+
+        .ultimate-board {
+            position: relative;
+            width: min(95vw, calc(100dvh - 200px));
+            height: min(95vw, calc(100dvh - 200px));
+        }
+
+        .grid-line {
+            position: absolute;
+            background-color: var(--line-color);
+            pointer-events: none; 
+            z-index: 1;
+        }
+
+        .big-line { border-radius: 6px; }
+        .big-line.v-line { width: 12px; height: 100%; top: 0; }
+        .big-line.h-line { height: 12px; width: 100%; left: 0; }
+        .bl-v1 { left: calc(33.333% - 6px); }
+        .bl-v2 { left: calc(66.666% - 6px); }
+        .bl-h1 { top: calc(33.333% - 6px); }
+        .bl-h2 { top: calc(66.666% - 6px); }
+
+        .small-line { border-radius: 3px; }
+        .small-line.v-line { width: 6px; height: 100%; top: 0; }
+        .small-line.h-line { height: 6px; width: 100%; left: 0; }
+        .sl-v1 { left: calc(33.333% - 3px); }
+        .sl-v2 { left: calc(66.666% - 3px); }
+        .sl-h1 { top: calc(33.333% - 3px); }
+        .sl-h2 { top: calc(66.666% - 3px); }
+
+        .big-cells-grid {
+            position: absolute; top: 0; left: 0;
+            width: 100%; height: 100%;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: repeat(3, 1fr);
+            z-index: 2;
+        }
+
+        .big-cell-wrapper {
+            position: relative;
+            padding: 12%; 
+            display: flex; align-items: center; justify-content: center;
+            transition: all 0.3s ease;
+        }
+
+        .small-board {
+            position: relative;
+            width: 100%; height: 100%;
+            border-radius: 12px; 
+            transition: all 0.3s ease; 
+        }
+
+        .big-cell-wrapper.active .small-board { 
+            background-color: #e6f7ff; 
+            box-shadow: inset 0 0 20px rgba(0, 150, 200, 0.15), 
+                        0 0 15px rgba(0, 150, 200, 0.3); 
+        }
+
+        /* Highlight wenn man selbst am Zug ist */
+        .my-turn-glow {
+            box-shadow: 0 0 15px var(--online-green) !important;
+        }
+
+        .small-cells-grid {
+            position: absolute; top: 0; left: 0;
+            width: 100%; height: 100%;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: repeat(3, 1fr);
+            z-index: 3;
+        }
+
+        .small-cell {
+            background-color: transparent;
+            display: grid; 
+            place-items: center; 
+            line-height: 1;
+            margin: 0;
+            padding: 0;
+            cursor: pointer; 
+            font-size: 6vmin;
+            font-weight: bold;
+            border-radius: 8px;
+        }
+
+        .small-cell:hover:not(.taken) { background-color: rgba(0, 0, 0, 0.04); }
+        .small-cell.taken { cursor: default; }
+        .small-cell.x-mark { color: #d32f2f; }
+        .small-cell.o-mark { color: #1976d2; }
+
+        .big-cell-wrapper.won-X::after, .big-cell-wrapper.won-O::after {
+            content: attr(data-winner);
+            position: absolute; 
+            top: 10%; left: 10%; width: 80%; height: 80%; 
+            display: grid; 
+            place-items: center; 
+            line-height: 1;
+            font-size: 18vmin; font-weight: bold; 
+            background-color: var(--bg-color); 
+            border-radius: 15px;
+            z-index: 10;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08); 
+        }
+        .big-cell-wrapper.won-X::after { color: #d32f2f; }
+        .big-cell-wrapper.won-O::after { color: #1976d2; }
+
+        /* Input Styling */
+        input { width: 70px; padding: 6px; border-radius: 10px; border: 1px solid #ccc; font-size: 16px; text-align: center; }
+        .id-badge { background: #333; color: #fff; padding: 4px 12px; border-radius: 10px; font-family: monospace; font-size: 18px; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div class="net-bar">
+        <div>ID: <span id="my-id" class="id-badge">...</span></div>
+        <input type="number" id="peer-id-input" placeholder="PIN" pattern="\d*">
+        <button class="net-btn" onclick="connectToPeer()">Beitreten</button>
+        <button class="net-btn" onclick="requestReset()">Neu</button>
+    </div>
+
+    <div class="header">
+        <h1>Ultimate XO Online</h1>
+        <p id="status">Warte auf Verbindung...</p>
+    </div>
+
+    <div class="board-container">
+        <div class="ultimate-board" id="board"></div>
+    </div>
+
+    <script>
+        // --- PEER JS NETZWERK LOGIK ---
+        const random3DigitId = Math.floor(100 + Math.random() * 900).toString();
+        const peer = new Peer(random3DigitId);
+        let conn = null;
+        let myRole = null; // 'X' (Host) oder 'O' (Gast)
+
+        peer.on('open', id => {
+            document.getElementById('my-id').innerText = id;
+            document.getElementById('status').innerText = "Bereit! Gib deinem Partner die ID " + id;
+        });
+
+        peer.on('error', err => {
+            if (err.type === 'unavailable-id') {
+                location.reload(); // Neue ID würfeln
+            }
+        });
+
+        // Host empfängt Verbindung
+        peer.on('connection', c => {
+            if (conn) return;
+            conn = c;
+            myRole = 'X';
+            setupConnection();
+        });
+
+        // Gast verbindet sich
+        function connectToPeer() {
+            const id = document.getElementById('peer-id-input').value;
+            if (!id) return;
+            conn = peer.connect(id);
+            myRole = 'O';
+            setupConnection();
+        }
+
+        function setupConnection() {
+            conn.on('open', () => {
+                document.getElementById('status').innerText = "Verbunden! Spieler X beginnt.";
+                resetLocalGame();
+            });
+            conn.on('data', data => {
+                if (data.type === 'move') {
+                    executeMove(data.big, data.small);
+                } else if (data.type === 'reset') {
+                    resetLocalGame();
+                }
+            });
+        }
+
+        function sendMove(big, small) {
+            if (conn && conn.open) conn.send({ type: 'move', big: big, small: small });
+        }
+
+        function requestReset() {
+            if (conn && conn.open) {
+                resetLocalGame();
+                conn.send({ type: 'reset' });
+            }
+        }
+
+        // --- SPIEL LOGIK ---
+        let currentPlayer = 'X';
+        let activeBigCell = -1; 
+        let bigBoardWinners = Array(9).fill(null);
+        let gameOver = false;
+
+        function createGridLinesHTML(isBig) {
+            const sizeClass = isBig ? 'big-line' : 'small-line';
+            const prefix = isBig ? 'bl' : 'sl';
+            return `
+                <div class="grid-line v-line ${sizeClass} ${prefix}-v1"></div>
+                <div class="grid-line v-line ${sizeClass} ${prefix}-v2"></div>
+                <div class="grid-line h-line ${sizeClass} ${prefix}-h1"></div>
+                <div class="grid-line h-line ${sizeClass} ${prefix}-h2"></div>
+            `;
+        }
+
+        function createBoard() {
+            const boardEl = document.getElementById('board');
+            let html = createGridLinesHTML(true);
+            html += `<div class="big-cells-grid">`;
+            for (let i = 0; i < 9; i++) {
+                html += `<div class="big-cell-wrapper" id="wrapper-${i}">
+                            <div class="small-board">
+                                ${createGridLinesHTML(false)}
+                                <div class="small-cells-grid">`;
+                for (let j = 0; j < 9; j++) {
+                    html += `<div class="small-cell" onclick="handleMoveClick(${i}, ${j})"><span></span></div>`;
+                }
+                html += `       </div>
+                            </div>
+                         </div>`;
+            }
+            html += `</div>`;
+            boardEl.innerHTML = html;
+            updateVisuals();
+        }
+
+        function handleMoveClick(bigIdx, smallIdx) {
+            if (!conn || !conn.open || gameOver) return;
+            if (currentPlayer !== myRole) return; // Nicht dein Zug
+
+            if (executeMove(bigIdx, smallIdx)) {
+                sendMove(bigIdx, smallIdx);
+            }
+        }
+
+        function executeMove(bigIdx, smallIdx) {
+            if (gameOver || bigBoardWinners[bigIdx]) return false;
+            if (activeBigCell !== -1 && activeBigCell !== bigIdx) return false;
+
+            const wrapperEl = document.getElementById(`wrapper-${bigIdx}`);
+            const smallCellEl = wrapperEl.querySelectorAll('.small-cell')[smallIdx];
+            const spanEl = smallCellEl.querySelector('span');
+
+            if (smallCellEl.classList.contains('taken')) return false;
+
+            spanEl.innerText = currentPlayer;
+            smallCellEl.classList.add('taken', currentPlayer === 'X' ? 'x-mark' : 'o-mark');
+
+            checkSmallWin(bigIdx);
+            
+            if (bigBoardWinners[smallIdx] !== null || isFull(smallIdx)) {
+                activeBigCell = -1;
+            } else {
+                activeBigCell = smallIdx;
+            }
+
+            checkBigWin();
+            
+            if (!gameOver) {
+                currentPlayer = currentPlayer === 'X' ? 'O' : 'X';
+                updateVisuals();
+                const statusColor = currentPlayer === 'X' ? '#d32f2f' : '#1976d2';
+                const turnName = (currentPlayer === myRole) ? "DU bist dran" : "Partner ist dran";
+                document.getElementById('status').innerHTML = `${turnName} (<b>${currentPlayer}</b>)`;
+            }
+            return true;
+        }
+
+        function isFull(bigIdx) {
+            const cells = document.getElementById(`wrapper-${bigIdx}`).querySelectorAll('.small-cell');
+            return Array.from(cells).every(c => c.classList.contains('taken'));
+        }
+
+        function checkSmallWin(bigIdx) {
+            const cells = Array.from(document.getElementById(`wrapper-${bigIdx}`).querySelectorAll('.small-cell span')).map(span => span.innerText);
+            const winner = calculateWinner(cells);
+            if (winner) {
+                bigBoardWinners[bigIdx] = winner;
+                const wrapperEl = document.getElementById(`wrapper-${bigIdx}`);
+                wrapperEl.classList.add(`won-${winner}`);
+                wrapperEl.setAttribute('data-winner', winner);
+            }
+        }
+
+        function checkBigWin() {
+            const winner = calculateWinner(bigBoardWinners);
+            if (winner) {
+                const winColor = winner === 'X' ? '#d32f2f' : '#1976d2';
+                const winText = (winner === myRole) ? "Du hast gewonnen!" : "Partner hat gewonnen!";
+                document.getElementById('status').innerHTML = `<b style="color: ${winColor}; font-size: 18px;">${winText} 🎉</b>`;
+                gameOver = true;
+                activeBigCell = -1;
+                updateVisuals();
+            }
+        }
+
+        function calculateWinner(cells) {
+            const lines = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+            for (let [a, b, c] of lines) {
+                if (cells[a] && cells[a] === cells[b] && cells[a] === cells[c]) return cells[a];
+            }
+            return null;
+        }
+
+        function updateVisuals() {
+            const statusBox = document.getElementById('status');
+            if (currentPlayer === myRole && !gameOver) {
+                statusBox.classList.add('my-turn-glow');
+            } else {
+                statusBox.classList.remove('my-turn-glow');
+            }
+
+            for (let i = 0; i < 9; i++) {
+                const wrapperEl = document.getElementById(`wrapper-${i}`);
+                wrapperEl.classList.remove('active');
+                if (!gameOver && (activeBigCell === -1 || activeBigCell === i) && !bigBoardWinners[i]) {
+                    wrapperEl.classList.add('active');
+                }
+            }
+        }
+
+        function resetLocalGame() {
+            currentPlayer = 'X';
+            activeBigCell = -1;
+            bigBoardWinners = Array(9).fill(null);
+            gameOver = false;
+            if (myRole) {
+                const statusColor = currentPlayer === 'X' ? '#d32f2f' : '#1976d2';
+                const turnName = (currentPlayer === myRole) ? "DU bist dran" : "Partner ist dran";
+                document.getElementById('status').innerHTML = `${turnName} (<b>${currentPlayer}</b>)`;
+            }
+            createBoard();
+        }
+
+        createBoard();
+    </script>
+</body>
+</html>
