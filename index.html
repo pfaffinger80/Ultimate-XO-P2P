@@ -184,9 +184,22 @@
     </div>
 
     <script>
-        // --- PEER JS NETZWERK LOGIK ---
+        // --- PEER JS NETZWERK LOGIK MIT STUN-SERVERN ---
         const random3DigitId = Math.floor(100 + Math.random() * 900).toString();
-        const peer = new Peer(random3DigitId);
+        
+        // NEU: Hier fügen wir die Google STUN-Server ein, damit die Router im Internet durchlässig werden
+        const peer = new Peer(random3DigitId, {
+            config: {
+                'iceServers': [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:stun1.l.google.com:19302' },
+                    { urls: 'stun:stun2.l.google.com:19302' },
+                    { urls: 'stun:stun3.l.google.com:19302' },
+                    { urls: 'stun:stun4.l.google.com:19302' }
+                ]
+            }
+        });
+        
         let conn = null;
         let myRole = null; // 'X' (Host) oder 'O' (Gast)
 
