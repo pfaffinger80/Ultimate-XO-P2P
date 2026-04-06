@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Ultimate XO Online - P2P</title>
+    <title>Ultimate XO Online - Stable P2P</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         :root {
@@ -39,7 +39,7 @@
         }
 
         h1 { margin: 0; font-size: 24px; color: #333; }
-        #status { margin: 4px 0 0 0; font-size: 16px; color: #555; }
+        #status { margin: 4px 0 0 0; font-size: 16px; color: #555; text-align: center; padding: 0 10px; }
         
         .net-btn {
             padding: 6px 14px;
@@ -112,7 +112,6 @@
                         0 0 15px rgba(0, 150, 200, 0.3); 
         }
 
-        /* Highlight wenn man selbst am Zug ist */
         .my-turn-glow {
             box-shadow: 0 0 15px var(--online-green) !important;
         }
@@ -160,23 +159,22 @@
         .big-cell-wrapper.won-X::after { color: #d32f2f; }
         .big-cell-wrapper.won-O::after { color: #1976d2; }
 
-        /* Input Styling */
-        input { width: 70px; padding: 6px; border-radius: 10px; border: 1px solid #ccc; font-size: 16px; text-align: center; }
+        input { width: 90px; padding: 6px; border-radius: 10px; border: 1px solid #ccc; font-size: 16px; text-align: center; }
         .id-badge { background: #333; color: #fff; padding: 4px 12px; border-radius: 10px; font-family: monospace; font-size: 18px; font-weight: bold; }
     </style>
 </head>
 <body>
 
     <div class="net-bar">
-        <div>ID: <span id="my-id" class="id-badge">...</span></div>
-        <input type="number" id="peer-id-input" placeholder="PIN" pattern="\d*">
+        <div>PIN: <span id="my-id" class="id-badge">...</span></div>
+        <input type="number" id="peer-id-input" placeholder="12345" pattern="\d*">
         <button class="net-btn" onclick="connectToPeer()">Beitreten</button>
         <button class="net-btn" onclick="requestReset()">Neu</button>
     </div>
 
     <div class="header">
         <h1>Ultimate XO Online</h1>
-        <p id="status">Warte auf Verbindung...</p>
+        <p id="status">Verbindung zum Server wird aufgebaut...</p>
     </div>
 
     <div class="board-container">
@@ -184,37 +182,43 @@
     </div>
 
     <script>
-        // --- PEER JS NETZWERK LOGIK MIT STUN-SERVERN ---
-        const random3DigitId = Math.floor(100 + Math.random() * 900).toString();
+        // --- PEER JS NETZWERK LOGIK (Stabil) ---
         
-        // NEU: Hier fügen wir die Google STUN-Server ein, damit die Router im Internet durchlässig werden
-        const peer = new Peer(random3DigitId, {
+        // Generiere eine 5-stellige PIN (10000 bis 99999) um Kollisionen zu vermeiden
+        const randomPin = Math.floor(10000 + Math.random() * 90000).toString();
+        
+        const peer = new Peer(randomPin, {
             config: {
                 'iceServers': [
                     { urls: 'stun:stun.l.google.com:19302' },
-                    { urls: 'stun:stun1.l.google.com:19302' },
-                    { urls: 'stun:stun2.l.google.com:19302' },
-                    { urls: 'stun:stun3.l.google.com:19302' },
-                    { urls: 'stun:stun4.l.google.com:19302' }
+                    { urls: 'stun:global.stun.twilio.com:3478' } // Backup STUN Server
                 ]
             }
         });
         
         let conn = null;
-        let myRole = null; // 'X' (Host) oder 'O' (Gast)
+        let myRole = null; 
 
         peer.on('open', id => {
             document.getElementById('my-id').innerText = id;
-            document.getElementById('status').innerText = "Bereit! Gib deinem Partner die ID " + id;
+            document.getElementById('status').innerText = "Bereit! Gib deinem Partner die PIN " + id;
         });
 
+        // KLARE FEHLERANZEIGE AUF DEM BILDSCHIRM
         peer.on('error', err => {
+            console.error(err);
+            const statusEl = document.getElementById('status');
             if (err.type === 'unavailable-id') {
-                location.reload(); // Neue ID würfeln
+                statusEl.innerHTML = `<b style="color:red">PIN belegt! Bitte Seite neu laden.</b>`;
+            } else if (err.type === 'peer-unavailable') {
+                statusEl.innerHTML = `<b style="color:red">Partner nicht gefunden! Falsche PIN?</b>`;
+            } else if (err.type === 'network') {
+                statusEl.innerHTML = `<b style="color:red">Netzwerkfehler! Server blockiert.</b>`;
+            } else {
+                statusEl.innerHTML = `<b style="color:red">Verbindungsfehler: ${err.type}</b>`;
             }
         });
 
-        // Host empfängt Verbindung
         peer.on('connection', c => {
             if (conn) return;
             conn = c;
@@ -222,10 +226,10 @@
             setupConnection();
         });
 
-        // Gast verbindet sich
         function connectToPeer() {
             const id = document.getElementById('peer-id-input').value;
             if (!id) return;
+            document.getElementById('status').innerText = "Verbinde mit " + id + "...";
             conn = peer.connect(id);
             myRole = 'O';
             setupConnection();
@@ -233,7 +237,7 @@
 
         function setupConnection() {
             conn.on('open', () => {
-                document.getElementById('status').innerText = "Verbunden! Spieler X beginnt.";
+                document.getElementById('status').innerHTML = "<b style='color:green'>Verbunden! Spieler X beginnt.</b>";
                 resetLocalGame();
             });
             conn.on('data', data => {
@@ -242,6 +246,9 @@
                 } else if (data.type === 'reset') {
                     resetLocalGame();
                 }
+            });
+            conn.on('close', () => {
+                document.getElementById('status').innerHTML = `<b style="color:red">Partner hat das Spiel verlassen.</b>`;
             });
         }
 
@@ -296,7 +303,7 @@
 
         function handleMoveClick(bigIdx, smallIdx) {
             if (!conn || !conn.open || gameOver) return;
-            if (currentPlayer !== myRole) return; // Nicht dein Zug
+            if (currentPlayer !== myRole) return;
 
             if (executeMove(bigIdx, smallIdx)) {
                 sendMove(bigIdx, smallIdx);
